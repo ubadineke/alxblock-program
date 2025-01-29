@@ -1,15 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import { BN, Program } from "@coral-xyz/anchor";
 import { AlxblockProgram } from "../target/types/alxblock_program";
 import {
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccount,
   getOrCreateAssociatedTokenAccount,
   getAccount,
   createMint,
   mintTo,
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import { assert } from "chai";
@@ -19,146 +15,181 @@ describe("alxblock-program", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.AlxblockProgram as Program<AlxblockProgram>;
-
-  let admin: anchor.web3.Keypair;
-  let adminTokenAccount: anchor.web3.PublicKey;
-  let vaultAuthority: anchor.web3.PublicKey;
-  let vaultTokenAccount: anchor.web3.PublicKey;
-  let tokenVaultMetadata: anchor.web3.PublicKey;
-  let tokenMint: anchor.web3.Keypair;
-  let vaultAuthorityBump: number;
+  let admin = anchor.web3.Keypair.generate();
+  let tokenMint;
+  let adminTokenAccount;
+  let vaultAuthority;
+  let vaultTokenAccount;
 
   const totalSupply = 10000;
   const expectedTokenAmount = (15 * 65 * totalSupply) / 10000;
 
   before(async () => {
-    try {
-      admin = Keypair.generate();
-      tokenMint = Keypair.generate();
+    // Airdrop SOL to the admin wallet
+    const signature = await provider.connection.requestAirdrop(
+      admin.publicKey,
+      1000000000 // 1 SOL
+    );
+    await provider.connection.confirmTransaction(signature, "confirmed");
 
-      // Airdrop SOL to the admin
-      const signature = await provider.connection.requestAirdrop(admin.publicKey, 1000000000);
-      await provider.connection.confirmTransaction(signature, "confirmed");
-      console.log("1. Airdrop completed");
+    // Create a token mint
+    tokenMint = await createMint(
+      provider.connection,
+      admin,
+      admin.publicKey,
+      null,
+      9 // Decimals
+    );
 
-      // Create the token mint
-      await createMint(provider.connection, admin, admin.publicKey, null, 9, tokenMint);
-      console.log("2. Token mint created:", tokenMint.publicKey.toString());
+    // Derive the vault authority PDA
+    [vaultAuthority] = await PublicKey.findProgramAddressSync(
+      [Buffer.from("vault-authority")],
+      program.programId
+    );
 
-      // Get admin token account address
-      // adminTokenAccount = await getAssociatedTokenAddress(tokenMint.publicKey, admin.publicKey);
+    vaultTokenAccount = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      admin,
+      tokenMint,
+      vaultAuthority,
+      true
+    );
 
-      // Create the admin's token account and wait for confirmation
-      adminTokenAccount = await getOrCreateAssociatedTokenAccount(
-        provider.connection,
-        admin, // Admin's wallet
-        tokenMint.publicKey, // Token mint
-        admin.publicKey // Admin should own this token account
-      );
-      console.log("3. Admin token account created:", adminTokenAccount.toBase58());
-
-      // Add a small delay to ensure account creation is propagated
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Verify token account with retries
-      let tokenAccount = null;
-      let retries = 5;
-      while (retries > 0) {
-        try {
-          tokenAccount = await getAccount(provider.connection, adminTokenAccount, "confirmed");
-          console.log("4. Token account verified");
-          break;
-        } catch (e) {
-          console.log(`Retry ${6 - retries}: Waiting for token account to be confirmed...`);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          retries--;
-          if (retries === 0) throw e;
-        }
-      }
-
-      // Derive vault authority
-      [vaultAuthority, vaultAuthorityBump] = await PublicKey.findProgramAddressSync(
-        [Buffer.from("vault-authority")],
-        program.programId
-      );
-      console.log("5. PDA derived:", vaultAuthority.toBase58());
-
-      // Only proceed with minting if we successfully verified the token account
-      if (tokenAccount) {
-        await mintTo(
-          provider.connection,
-          admin,
-          tokenMint.publicKey,
-          adminTokenAccount,
-          admin,
-          totalSupply,
-          [],
-          { commitment: "confirmed" }
-        );
-        console.log(`6. Minted ${totalSupply} tokens to admin`);
-
-        vaultTokenAccount = await getAssociatedTokenAddress(
-          tokenMint.publicKey,
-          vaultAuthority,
-          true
-        );
-        console.log("7. Vault token account derived:", vaultTokenAccount.toBase58());
-      }
-    } catch (error) {
-      console.error("Setup error:", error);
-      throw error;
-    }
+    adminTokenAccount = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      admin,
+      tokenMint,
+      admin.publicKey,
+      true
+    );
   });
 
   it("should initialize the vault", async () => {
-    try {
-      console.log("Starting vault initialization test");
-      console.log("Admin pubkey:", admin.publicKey.toBase58());
-      console.log("Token mint:", tokenMint.publicKey.toBase58());
+    // Call the initialize_vault instruction
+    await program.methods
+      .initVault()
+      .accounts({
+        admin: admin.publicKey,
+        vaultAuthority: vaultAuthority,
+        vaultTokenAccount: vaultTokenAccount.address,
+        tokenMint: tokenMint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([admin])
+      .rpc();
 
-      await program.methods
-        .initVault(new anchor.BN(totalSupply)) // Match the exact function name from your program
-        .accounts({
-          admin: admin.publicKey,
-          adminTokenAccount: adminTokenAccount,
-          vaultAuthority: vaultAuthority,
-          vaultTokenAccount: vaultTokenAccount,
-          tokenMint: tokenMint.publicKey,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([admin])
-        .rpc();
+    // Fetch the vault authority account
+    const vaultAccount = await program.account.tokenVault.fetch(vaultAuthority);
 
-      const vaultAccount = await program.account.tokenVault.fetch(vaultAuthority);
+    // Verify the vault authority account
+    assert.isTrue(vaultAccount.isInitialized, "Vault not initialized");
+    assert.strictEqual(
+      vaultAccount.admin.toBase58(),
+      admin.publicKey.toBase58(),
+      "Admin pubkey mismatch"
+    );
+    assert.strictEqual(
+      vaultAccount.tokenMint.toBase58(),
+      tokenMint.toBase58(),
+      "Token mint mismatch"
+    );
+    assert.strictEqual(
+      vaultAccount.vaultTokenAccount.toBase58(),
+      vaultTokenAccount.address.toBase58(),
+      "Vault token account mismatch"
+    );
+    assert.strictEqual(vaultAccount.totalTokens.toNumber(), 0, "Total tokens should be 0");
 
-      assert.isTrue(vaultAccount.isInitialized, "Vault not initialized");
-      assert.strictEqual(
-        vaultAccount.totalTokens.toNumber(),
-        expectedTokenAmount,
-        "Vault total tokens mismatch"
-      );
-      assert.strictEqual(
-        vaultAccount.admin.toBase58(),
-        admin.publicKey.toBase58(),
-        "Admin pubkey mismatch"
-      );
-      assert.strictEqual(
-        vaultAccount.tokenMint.toBase58(),
-        tokenMint.publicKey.toBase58(),
-        "Token mint mismatch"
-      );
-      assert.strictEqual(
-        vaultAccount.vaultTokenAccount.toBase58(),
-        vaultTokenAccount.toBase58(),
-        "Vault token account mismatch"
-      );
-      assert.strictEqual(vaultAccount.bump, vaultAuthorityBump, "Bump seed mismatch");
-    } catch (error) {
-      console.error("Test error:", error);
-      throw error;
-    }
+    const tokenAccountInfo = await getAccount(provider.connection, vaultTokenAccount.address);
+
+    assert.strictEqual(
+      tokenAccountInfo.owner.toBase58(),
+      vaultAuthority.toBase58(),
+      "Token account authority mismatch"
+    );
+  });
+
+  it("should fund the vault", async () => {
+    console.log("start");
+
+    // Print out
+    console.log(34235232, admin.publicKey.toString());
+    console.log(34443433, adminTokenAccount.owner.toString());
+    // to confirm they match
+
+    const vaultAccountInfo = await getAccount(provider.connection, vaultTokenAccount.address);
+    // console.log("TOKENN", vaultAccountInfo);
+
+    const adminAccountInfo = await getAccount(provider.connection, adminTokenAccount.address);
+    // console.log("ADMIN TOKEENNNN", adminAccountInfo);
+
+    console.log("Initial Admin Token Account Balance:", adminAccountInfo.amount.toString());
+    console.log("Initial Vault Token Account Balance:", vaultAccountInfo.amount.toString());
+
+    await mintTo(
+      provider.connection,
+      admin,
+      tokenMint,
+      adminTokenAccount.address,
+      admin.publicKey,
+      totalSupply,
+      [],
+      { commitment: "confirmed" }
+    );
+    console.log(1, 2, 3);
+
+    const adminAccountInfo2 = await getAccount(provider.connection, adminTokenAccount.address);
+    console.log("Post Mint Admin Token Account Balance:", adminAccountInfo2.amount.toString());
+    console.log("Post Mint Vault Token Account Balance:", vaultAccountInfo.amount.toString());
+
+    console.log(1, 2, 3, 4);
+    await program.methods
+      .fundVault(new anchor.BN(totalSupply))
+      .accounts({
+        admin: admin.publicKey,
+        adminTokenAccount: adminTokenAccount.address,
+        vaultAuthority: vaultAuthority,
+        vaultTokenAccount: vaultTokenAccount.address,
+        tokenMint: tokenMint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([admin])
+      .rpc();
+
+    const vaultAccountInfo3 = await getAccount(provider.connection, vaultTokenAccount.address);
+    const adminAccountInfo3 = await getAccount(provider.connection, adminTokenAccount.address);
+    console.log("Post Mint Admin Token Account Balance:", adminAccountInfo3.amount.toString());
+    console.log("Post Mint Vault Token Account Balance:", vaultAccountInfo3.amount.toString());
+
+    console.log("after the brink");
+    // Fetch the vault authority account
+    const vaultAccount = await program.account.tokenVault.fetch(vaultAuthority);
+
+    // Fetch the admin's token account balance
+    const adminTokenAccountInfo = await provider.connection.getTokenAccountBalance(
+      adminTokenAccount.address
+    );
+    assert.strictEqual(
+      adminTokenAccountInfo.value.amount,
+      (totalSupply - 0.15 * 0.65 * totalSupply).toString(), // Remaining tokens after transfer
+      "Admin token account balance mismatch"
+    );
+    console.log(3);
+
+    // Fetch the vault token account balance
+    const vaultTokenAccountInfo = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount.address
+    );
+    assert.strictEqual(
+      vaultTokenAccountInfo.value.amount,
+      (0.15 * 0.65 * totalSupply).toString(), // Transferred tokens
+      "Vault token account balance mismatch"
+    );
   });
 });

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::{self, Token, TokenAccount, Mint, Transfer},
+    token::{ Token, TokenAccount, Mint},
     associated_token::AssociatedToken,
 };
 use crate::states::*;
@@ -9,14 +9,6 @@ use crate::states::*;
 pub struct InitializeVault<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
-    
-    #[account(
-      init,
-      payer = admin,
-      associated_token::mint = token_mint,
-      associated_token::authority = admin
-    )]
-    pub admin_token_account: Account<'info, TokenAccount>, // Admin's token account
     
     #[account(
       init_if_needed,
@@ -28,12 +20,12 @@ pub struct InitializeVault<'info> {
     pub vault_authority: Account<'info, TokenVault>, // PDA for metadata and authority,
     
     #[account(
-        init,
+        init_if_needed,
         payer = admin,
         associated_token::mint = token_mint,
         associated_token::authority = vault_authority,
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
     
     #[account(mut)]
     pub token_mint: Account<'info, Mint>,
@@ -46,19 +38,18 @@ pub struct InitializeVault<'info> {
 
 pub fn initialize_vault(
     ctx: Context<InitializeVault>,
-    total_supply: u64,
 ) -> Result<()> {
     // Calculate expected token amount (65% of 15% of total supply)
-    let expected_amount = (15 * 65 * total_supply) / 10000;
+    // let expected_amount = (15 * 65 * total_supply) / 10000;
     
-    let cpi_ctx = CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        Transfer {
-            from: ctx.accounts.admin_token_account.to_account_info(),
-            to: ctx.accounts.vault_token_account.to_account_info(),
-            authority: ctx.accounts.admin.to_account_info(),
-        },
-    );
+    // let cpi_ctx = CpiContext::new(
+    //     ctx.accounts.token_program.to_account_info(),
+    //     Transfer {
+    //         from: ctx.accounts.admin_token_account.to_account_info(),
+    //         to: ctx.accounts.vault_token_account.to_account_info(),
+    //         authority: ctx.accounts.admin.to_account_info(),
+    //     },
+    // );
      // Derive the PDA seeds and bump
     //  let seeds = &[b"vault-authority"];
     //  let bump = ctx.bumps.vault_authority;
@@ -72,14 +63,14 @@ pub fn initialize_vault(
     //     },
     //     signer_seeds,
     // );
-    token::transfer(cpi_ctx, expected_amount)?;
+    // token::transfer(cpi_ctx, expected_amount)?;
 
     // Initialize vault metadata
     let token_vault = &mut ctx.accounts.vault_authority;
     token_vault.admin = ctx.accounts.admin.key();
     token_vault.token_mint = ctx.accounts.token_mint.key();
     token_vault.vault_token_account = ctx.accounts.vault_token_account.key();
-    token_vault.total_tokens = expected_amount;
+    token_vault.total_tokens = 0;
     token_vault.bump = ctx.bumps.vault_authority;
     token_vault.is_initialized = true;
 

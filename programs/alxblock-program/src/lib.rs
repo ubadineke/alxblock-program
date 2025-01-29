@@ -12,7 +12,11 @@ declare_id!("AANa17EN5vqdUPwtc9hqZ7FZLqPNRZMbbc5cydDGRMCi");
 pub mod alxblock_program {
     use super::*;
 
-    pub fn init_vault(ctx: Context<InitializeVault>, total_supply: u64) -> Result<()> {
-        initialize_vault(ctx, total_supply)
+    pub fn init_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        initialize_vault(ctx)
     }
+
+    pub fn fund_vault(ctx: Context<FundVault>, total_supply: u64) -> Result<()>{
+        fund_token_vault(ctx, total_supply)
+    }  
 }
