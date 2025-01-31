@@ -18,5 +18,13 @@ pub mod alxblock_program {
 
     pub fn fund_vault(ctx: Context<FundVault>, total_supply: u64) -> Result<()>{
         fund_token_vault(ctx, total_supply)
-    }  
+    } 
+
+    pub fn create_contributor(ctx: Context<RegisterContributor>, name: String) -> Result<()>{
+        create_contributor::create_contributor(ctx, name)
+    }
+
+    pub fn record_contribution(ctx: Context<RegisterContribution>, points:u64) -> Result<()>{
+        register_contribution(ctx, points)
+    }
 }

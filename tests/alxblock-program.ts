@@ -192,4 +192,43 @@ describe("alxblock-program", () => {
       "Vault token account balance mismatch"
     );
   });
+
+  it("create contributor", async () => {
+    const contributorName = "Test Contributor-David";
+    let user = anchor.web3.Keypair.generate();
+
+    const signature = await provider.connection.requestAirdrop(
+      user.publicKey,
+      1000000000 // 1 SOL
+    );
+
+    await provider.connection.confirmTransaction(signature, "confirmed");
+    const [contributorPDA, bump] = await PublicKey.findProgramAddressSync(
+      [Buffer.from("contributor"), user.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Execute the transaction
+    await program.methods
+      .createContributor(contributorName)
+      .accounts({
+        user: user.publicKey,
+        contributor: contributorPDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    // Fetch the created account
+    const contributorAccount = await program.account.contributor.fetch(contributorPDA);
+
+    // Verify the account data
+    assert.strictEqual(contributorAccount.name, contributorName, "Contributor name mismatch");
+    assert.strictEqual(
+      contributorAccount.authority.toString(),
+      user.publicKey.toString(),
+      "Authority mismatch"
+    );
+    assert.strictEqual(contributorAccount.totalPoints.toNumber(), 0, "Points mismatch");
+  });
 });
