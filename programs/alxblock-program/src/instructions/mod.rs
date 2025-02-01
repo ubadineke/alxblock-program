@@ -12,3 +12,12 @@ pub mod init_global_state;
 
 pub use register_contribution::*;
 pub mod register_contribution;
+
+pub use check_reward::*;
+pub mod check_reward;
+
+pub use fund_reward_pool::*;
+pub mod fund_reward_pool;
+
+pub use claim_reward::*;
+pub mod claim_reward;
