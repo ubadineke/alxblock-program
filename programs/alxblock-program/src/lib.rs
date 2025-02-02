@@ -39,4 +39,8 @@ pub mod alxblock_program {
     pub fn fund_reward_pool(ctx: Context<FundRewardPool>)-> Result<()>{
         fund_reward_pool::fund_reward_pool(ctx)
     }
+    
+    pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()>{
+        claim_reward::claim_reward(ctx)
+    }
 }

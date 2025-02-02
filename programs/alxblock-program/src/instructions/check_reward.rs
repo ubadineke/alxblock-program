@@ -43,7 +43,7 @@ pub fn check_reward(
   let reward = contributor.monthly_points
   .checked_div(global_state.monthly_contributor_points)
   .ok_or(CustomError::DivisionByZero)?
-  .checked_mul(100)
+  .checked_mul(global_state.monthly_token_pool)
   .ok_or(CustomError::Overflow)?
   .checked_div(slash)
   .ok_or(CustomError::DivisionByZero)?;

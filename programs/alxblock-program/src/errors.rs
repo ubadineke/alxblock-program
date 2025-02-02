@@ -10,6 +10,6 @@ pub enum CustomError{
     DivisionByZero,
     #[msg("Overflow error")]
     Overflow,
-
-
+    #[msg("No reward for you")]
+    NoRewardToClaim
 }

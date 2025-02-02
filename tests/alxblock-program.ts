@@ -25,6 +25,7 @@ describe("alxblock-program", () => {
   let user = anchor.web3.Keypair.generate();
   let rewardPoolPDA;
   let rewardsTokenAccount;
+  let userTokenAccount;
 
   const totalSupply = 1000000;
   const expectedTokenAmount = (15 * 65 * totalSupply) / 10000;
@@ -36,6 +37,13 @@ describe("alxblock-program", () => {
       1000000000 // 1 SOL
     );
     await provider.connection.confirmTransaction(signature, "confirmed");
+
+    const signature2 = await provider.connection.requestAirdrop(
+      user.publicKey,
+      1000000000 // 1 SOL
+    );
+
+    await provider.connection.confirmTransaction(signature2, "confirmed");
 
     // Create a token mint
     tokenMint = await createMint(
@@ -81,6 +89,14 @@ describe("alxblock-program", () => {
       true
     );
 
+    userTokenAccount = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      user,
+      tokenMint,
+      user.publicKey,
+      true
+    );
+
     [globalStatePDA] = await PublicKey.findProgramAddressSync(
       [Buffer.from("global-state")],
       program.programId
@@ -90,13 +106,6 @@ describe("alxblock-program", () => {
       [Buffer.from("contributor"), user.publicKey.toBuffer()],
       program.programId
     );
-
-    const signature2 = await provider.connection.requestAirdrop(
-      user.publicKey,
-      1000000000 // 1 SOL
-    );
-
-    await provider.connection.confirmTransaction(signature2, "confirmed");
 
     const signature3 = await provider.connection.requestAirdrop(
       rewardsTokenAccount.address,
@@ -305,7 +314,7 @@ describe("alxblock-program", () => {
     );
   });
 
-  it("Should calculate reward when monthly_contributor_points > 500", async () => {
+  it("Should calculate reward when monthly_contributor_points < 500", async () => {
     // Setup: Ensure contributor has points and global state is initialized
     await program.methods
       .checkMonthlyReward()
@@ -322,21 +331,13 @@ describe("alxblock-program", () => {
     const reward = contributorAccount.reward;
 
     const globalState = await program.account.globalState.fetch(globalStatePDA);
-    // console.log("Contributor's monthly points", contributorAccount.monthlyPoints.toNumber());
-    // console.log("programs Token Pool", globalState.monthlyTokenPool.toNumber());
-    // console.log(
-    //   "Total Accrued COntributor points that month",
-    //   globalState.monthlyContributorPoints.toNumber()
-    // );
 
     // Calculate expected reward
     const expectedReward = Math.floor(
       (contributorAccount.monthlyPoints.toNumber() /
         globalState.monthlyContributorPoints.toNumber()) *
-        globalState.monthlyContributorPoints.toNumber()
+        (globalState.monthlyTokenPool.toNumber() / 2)
     );
-    // console.log("Calculated Expected Reward", expectedReward);
-    // console.log("Reward from program", reward);
 
     assert.strictEqual(reward.toNumber(), expectedReward, "Reward not expected");
   });
@@ -360,7 +361,41 @@ describe("alxblock-program", () => {
       .rpc();
 
     const rewardAccount = await program.account.rewardPool.fetch(rewardPoolPDA);
-    console.log(rewardAccount);
+  });
+
+  it("successfully claims reward", async () => {
+    // Claim reward
+    await program.methods
+      .claimReward()
+      .accounts({
+        user: user.publicKey,
+        contributor: contributorPDA,
+        rewardPool: rewardPoolPDA,
+        rewardsTokenAccount: rewardsTokenAccount.address,
+        userTokenAccount: userTokenAccount.address,
+        tokenMint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([user])
+      .rpc();
+
+    // Verify user received tokens
+    const userTokenAccountInfo = await getAccount(provider.connection, userTokenAccount.address);
+
+    // expect(Number(userTokenAccountInfo.amount)).to.equal(REWARD_AMOUNT);
+    const contributorAccount = await program.account.contributor.fetch(contributorPDA);
+    assert.strictEqual(userTokenAccountInfo.amount.toString(), "5000", "Tokens not received");
+    // Verify contributor reward was reset
+
+    // const contributorAccount = await program.account.contributor.fetch(contributorPDA);
+    assert.strictEqual(
+      contributorAccount.reward.toNumber(),
+      0,
+      "Contributor account not cleared after claim"
+    );
   });
 });
 
