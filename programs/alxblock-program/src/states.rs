@@ -35,7 +35,9 @@ pub struct GlobalState {
     pub rewards_token_account: Pubkey,
     // pub token_mint: Pubkey,
     // pub vault_token_account: Pubkey, 
-    pub bump: u8
+    pub community_reserve_fund: Pubkey,
+    pub bump: u8,
+
 }
 
 #[account]
@@ -46,4 +48,12 @@ pub struct RewardPool{
     pub is_initialized: bool,
     pub rewards_token_account: Pubkey,
     pub bump: u8
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct CommunityReserveFund{
+  pub authority: Pubkey,
+  pub total_tokens: u64,
+  
 }

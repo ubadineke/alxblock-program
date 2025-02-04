@@ -29,10 +29,10 @@ pub struct RegisterContribution<'info>{
   pub system_program: Program<'info, System>
 }
 
-pub fn register_contribution(
-  ctx: Context<RegisterContribution>,
+pub fn register_contribution( ctx: Context<RegisterContribution>,
   points: u64
 ) -> Result<()>{
+
   let contributor = &mut ctx.accounts.contributor;
   let global_state = &mut ctx.accounts.global_state;
   contributor.monthly_points += points;

@@ -27,7 +27,7 @@ pub struct FundRewardPool<'info>{
   #[account(
     init_if_needed,
     payer = admin,
-      space = 8 + TokenVault::INIT_SPACE,
+      space = 8 + RewardPool::INIT_SPACE,
       seeds = [b"reward-pool"],
       bump
   )]
@@ -40,6 +40,23 @@ pub struct FundRewardPool<'info>{
     associated_token::authority = reward_pool,
   )]
   pub rewards_token_account: Account<'info, TokenAccount>,
+
+  #[account(
+    init_if_needed,
+    payer = admin,
+      space = 8 + CommunityReserveFund::INIT_SPACE,
+      seeds = [b"community-reserve-fund"],
+      bump
+  )]
+  pub community_reserve_fund: Account<'info, CommunityReserveFund>, //authority and metadata
+
+  #[account(
+    init_if_needed,
+    payer = admin,
+    associated_token::mint = token_mint,
+    associated_token::authority = community_reserve_fund,
+  )]
+  pub community_reserve_fund_account: Account<'info, TokenAccount>,
 
   #[account(
     mut,
@@ -60,16 +77,23 @@ pub fn fund_reward_pool(
   ctx: Context<FundRewardPool>,
 ) -> Result<()>{
 
-  let reward_pool = &mut ctx.accounts.reward_pool;
-  let global_state = &mut ctx.accounts.global_state;
+    let reward_pool = &mut ctx.accounts.reward_pool;
+    let global_state = &mut ctx.accounts.global_state;
 
-  let monthly_tokens = if global_state.monthly_contributor_points > 500 {
-    global_state.monthly_token_pool
+    let monthly_tokens = if global_state.monthly_contributor_points > 500 {
+      global_state.monthly_token_pool
+
   } else {
+    //Slash monthly token pool by 50%
     global_state.monthly_token_pool.checked_div(2)
-    .ok_or(CustomError::Overflow)?
+    .ok_or(CustomError::Overflow)?;
+  
+    //Transfer the rest of the tokens to the community reserve fund
+    ...
   };
   
+  //Fund reward pool
+  ...
   token::transfer(
     CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
