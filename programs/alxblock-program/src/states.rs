@@ -20,7 +20,8 @@ pub struct Contributor{
   pub authority: Pubkey,
   pub monthly_points: u64,
   pub total_points : u64,
-  pub reward: u64,
+  pub current_reward: u64,
+  pub total_rewards: u64,
   pub bump: u8
 }
 
@@ -36,6 +37,9 @@ pub struct GlobalState {
     // pub token_mint: Pubkey,
     // pub vault_token_account: Pubkey, 
     pub community_reserve_fund: Pubkey,
+    pub merkle_root: [u8; 32],
+    #[max_len(32)]
+    pub current_period: String,
     pub bump: u8,
 
 }

@@ -45,6 +45,13 @@ pub struct ClaimReward<'info> {
     pub token_mint: Account<'info, Mint>,
     
     
+    #[account(
+        mut,
+        seeds = [b"global-state"],
+        bump
+    )] // Initial small allocation; will grow dynamically
+    pub global_state: Account<'info, GlobalState>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -56,9 +63,7 @@ pub struct ClaimReward<'info> {
 
 pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
     let contributor = &mut ctx.accounts.contributor;
-
     let reward_amount = contributor.reward;
-
     require!(
         reward_amount > 0,
         CustomError::NoRewardToClaim
@@ -79,7 +84,6 @@ pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
       ),
       reward_amount
     )?;
-
     // Reset the reward amount after successful transfer
     contributor.reward = 0;
 

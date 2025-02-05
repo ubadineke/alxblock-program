@@ -21,3 +21,9 @@ pub mod fund_reward_pool;
 
 pub use claim_reward::*;
 pub mod claim_reward;
+
+pub use update_merkle_root::*;
+pub mod update_merkle_root;
+
+pub use claim_reward_with_proof::*;
+pub mod claim_reward_with_proof;

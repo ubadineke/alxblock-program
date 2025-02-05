@@ -48,7 +48,7 @@ pub fn check_reward(
   .checked_div(slash)
   .ok_or(CustomError::DivisionByZero)?;
 
-  contributor.reward = reward;
+  contributor.current_reward = reward;
 
   Ok(())
 }

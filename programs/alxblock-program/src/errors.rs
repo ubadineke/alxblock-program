@@ -11,5 +11,11 @@ pub enum CustomError{
     #[msg("Overflow error")]
     Overflow,
     #[msg("No reward for you")]
-    NoRewardToClaim
+    NoRewardToClaim,
+    #[msg("Unauthorized")]
+    Unauthorized,
+    #[msg("Invalid merkle proof")]
+    InvalidProof,
+    #[msg("Already claimed rewards for this period")]
+    AlreadyClaimed,
 }
