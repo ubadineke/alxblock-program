@@ -15,3 +15,5 @@ AIxBlock is pioneering the future of decentralized AI model development by incen
 - update_merkle_root
 
 details coming soon...
+
+### Optimized using Merkle trees
