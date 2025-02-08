@@ -2,6 +2,7 @@ import { MerkleTree } from "merkletreejs";
 import { keccak256 } from "js-sha3";
 import { PublicKey } from "@solana/web3.js";
 
+//Generate Merkle tree and add/update tree
 enum ContributionType {
   BugFixes,
   FeatureDevelopment,
